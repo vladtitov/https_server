@@ -17,7 +17,7 @@
 
             var login = function () {
 
-                $.post(url+'/login',JSON.stringify({usrname:'username',password:'password'})).done(function (res) {
+                $.post(url+'/login',JSON.stringify({username:'adminuser',password:'adminpassword'})).done(function (res) {
                     console.log(res)
                 }).fail(function (err) {
                     console.warn(err);

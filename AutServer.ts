@@ -4,11 +4,10 @@ import fs = require("fs");
 import crypto = require('crypto');
 import path = require("path");
 import FM = require('./FileManager');
-import db from 'sqlite';
+//import db from 'sqlite';
 
 import https = require('https');
-import {ServerRequest} from "http";
-//import {Server} from "https";
+
 
 export class AutServer {
   private https = https;
@@ -21,8 +20,8 @@ export class AutServer {
   private sessions = {};
   private PUB_DIR = 'pub';
   private fs = fs;
-  //private sqlite3 = require('sqlite3').verbose();
-  private db
+  private sqlite3 = require('sqlite3').verbose();
+  private db;
 
   private fileManager: FM.FileManager = new FM.FileManager();
 
@@ -159,7 +158,6 @@ export class AutServer {
   private processPost(req: http.ServerRequest, resp: http.ServerResponse, user: any, dataS: string) {
 
 
-
   }
 
   private saveUserData(user, data) {
@@ -181,30 +179,31 @@ export class AutServer {
     this.sessions[sid] = u;
   }
 
-  private processLogin(req, res, suser, data) {
-    var _this = this;
 
-    var onLogin = function (user) {
-      if (user) {
-        _this.setUserInSession(suser.sid, user);
-        _this.sendJson(res, {profile: user.profile, sid: suser.sid});
-      } else _this.sendJson(res, {result: 'wrong login'});
-    }
-
-    this.loginFunction(data.user, data.pass, onLogin);
-  }
-
-  private loginFunction = function (user: string, pass: string, callBack: Function) {
+  private loginFunction = function (user:any,  callBack: Function) {
 
     if (!this.db) this.db = new this.sqlite3.Database('data/directories.db');
 
-    var stmt = this.db.all('SELECT * FROM users WHERE username=? AND password=?', [user, pass], function (err, rows) {
+   // var stmt = this.db.all('SELECT * FROM users ', function (err, rows) {
+
+
+      let ar = [
+        crypto.createHash('md5').update(user.username).digest("hex"),
+        crypto.createHash('md5').update(user.password).digest("hex")
+      ];
+
+    console.log(ar);
+
+    var stmt = this.db.all('SELECT * FROM users WHERE username=? AND password=?', ar , function (err, rows) {
+      console.log(rows);
       if (err) {
         console.log(err);
         callBack(0);
       } else if (rows.length === 0) {
         callBack(0);
       } else {
+
+
         var user = rows[0];
         callBack(user);
       }
@@ -230,7 +229,7 @@ export class AutServer {
 
   }
 
-  setHeaders(resp: http.ServerResponse): void {
+  addHeaders(resp: http.ServerResponse): void {
     resp.setHeader('Content-Type', 'application/json');
     resp.setHeader('Access-Control-Allow-Origin', '*');
   }
@@ -238,14 +237,15 @@ export class AutServer {
 
   doLogin(resp: http.ServerResponse): void {
 
+
     let id = ' gggggggggggggggggggggggggggggggg';
+
     resp.setHeader("Set-Cookie", ['sessionid=' + id, 'Max-Age=3600', 'Version=1']);
   }
 
   close(): void {
     this.server.close();
   }
-
 
   processRequest(req: http.ServerRequest, resp: http.ServerResponse, user: any): void {
     if (req.method == 'GET') this.processGet(req, resp, user);
@@ -275,10 +275,27 @@ export class AutServer {
 
 
       let ip = req.connection.remoteAddress.substr(req.connection.remoteAddress.lastIndexOf(':') + 1);
+
       let ar: string[] = req.url.split('/');
-      console.log();
+      console.log(ar);
       if (ar[1] === 'login') {
 
+        this.readData(req,(data)=>{
+          let u =JSON.parse(data);
+          this.loginFunction(u, (res)=>{
+            res;
+          })
+          console.log(u);
+
+        });
+
+        this.addHeaders(resp);
+        resp.write(JSON.stringify({
+          error: 'login function',
+          timestamp: Date.now()
+        }));
+
+        resp.end();
 
       } else {
 
@@ -294,10 +311,7 @@ export class AutServer {
         }
 
       }
-
-
     });
-
 
     srv.listen(port, function () {
       console.log('Server started on port: ' + srv.address().port);

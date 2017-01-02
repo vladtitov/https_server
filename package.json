@@ -8,6 +8,6 @@
     "email": ""
   },
   "dependencies": {
-    "sqlite": "^2.2.4"
+    "sqlite3": "^3.1.8"
   }
 }

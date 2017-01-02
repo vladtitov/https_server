@@ -3,8 +3,8 @@ var fs = require("fs");
 var crypto = require('crypto');
 var path = require("path");
 var FM = require('./FileManager');
+//import db from 'sqlite';
 var https = require('https');
-//import {Server} from "https";
 var AutServer = (function () {
     function AutServer() {
         this.https = https;
@@ -15,6 +15,7 @@ var AutServer = (function () {
         this.sessions = {};
         this.PUB_DIR = 'pub';
         this.fs = fs;
+        this.sqlite3 = require('sqlite3').verbose();
         this.fileManager = new FM.FileManager();
         this.sendJson = function (res, data) {
             res.setHeader("Content-Type", 'application/json');
@@ -30,10 +31,17 @@ var AutServer = (function () {
                 u[str] = user[str];
             this.sessions[sid] = u;
         };
-        this.loginFunction = function (user, pass, callBack) {
+        this.loginFunction = function (user, callBack) {
             if (!this.db)
                 this.db = new this.sqlite3.Database('data/directories.db');
-            var stmt = this.db.all('SELECT * FROM users WHERE username=? AND password=?', [user, pass], function (err, rows) {
+            // var stmt = this.db.all('SELECT * FROM users ', function (err, rows) {
+            var ar = [
+                crypto.createHash('md5').update(user.username).digest("hex"),
+                crypto.createHash('md5').update(user.password).digest("hex")
+            ];
+            console.log(ar);
+            var stmt = this.db.all('SELECT * FROM users WHERE username=? AND password=?', ar, function (err, rows) {
+                console.log(rows);
                 if (err) {
                     console.log(err);
                     callBack(0);
@@ -164,18 +172,6 @@ var AutServer = (function () {
         if (data)
             this.saveUserData(user, data);
     };
-    AutServer.prototype.processLogin = function (req, res, suser, data) {
-        var _this = this;
-        var onLogin = function (user) {
-            if (user) {
-                _this.setUserInSession(suser.sid, user);
-                _this.sendJson(res, { profile: user.profile, sid: suser.sid });
-            }
-            else
-                _this.sendJson(res, { result: 'wrong login' });
-        };
-        this.loginFunction(data.user, data.pass, onLogin);
-    };
     AutServer.prototype.readData = function (req, callback) {
         var data = '';
         req.on('data', function (d) {
@@ -185,7 +181,7 @@ var AutServer = (function () {
             callback(data);
         });
     };
-    AutServer.prototype.setHeaders = function (resp) {
+    AutServer.prototype.addHeaders = function (resp) {
         resp.setHeader('Content-Type', 'application/json');
         resp.setHeader('Access-Control-Allow-Origin', '*');
     };
@@ -218,8 +214,21 @@ var AutServer = (function () {
         var srv = https.createServer(options, function (req, resp) {
             var ip = req.connection.remoteAddress.substr(req.connection.remoteAddress.lastIndexOf(':') + 1);
             var ar = req.url.split('/');
-            console.log();
+            console.log(ar);
             if (ar[1] === 'login') {
+                _this.readData(req, function (data) {
+                    var u = JSON.parse(data);
+                    _this.loginFunction(u, function (res) {
+                        res;
+                    });
+                    console.log(u);
+                });
+                _this.addHeaders(resp);
+                resp.write(JSON.stringify({
+                    error: 'login function',
+                    timestamp: Date.now()
+                }));
+                resp.end();
             }
             else {
                 var user = _this.retriveUser(req);
