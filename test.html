@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script
+            src="https://code.jquery.com/jquery-3.1.1.min.js"
+            integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
+            crossorigin="anonymous"></script>
+</head>
+<body>
+<div>
+    <script>
+        $(document).ready(function(){
+
+            var url = 'https://192.168.1.11:443';
+
+            var login = function () {
+
+                $.post(url+'/login',JSON.stringify({usrname:'username',password:'password'})).done(function (res) {
+                    console.log(res)
+                }).fail(function (err) {
+                    console.warn(err);
+                })
+            }
+
+
+
+            var gsendData = function () {
+
+                $.post(url+'/senddata',JSON.stringify({data:'some data',moreData:'moredata'})).done(function (res) {
+                    console.log(res)
+
+                }).fail(function (err) {
+                    console.warn(err)
+                })
+            }
+
+            login();
+
+
+        })
+    </script>
+</div>
+
+</body>
+</html>
