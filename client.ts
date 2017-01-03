@@ -34,8 +34,8 @@ function getData():void{
     })
   });
 
-  let user = JSON.stringify({username:'adminuser',password:'adminpassword'});
-  req.write(user);
+  let data = JSON.stringify({data:'mydata',data2:'mydata2'});
+  req.write(data);
   req.end();
   req.on('error', function(err){
     console.log(err);

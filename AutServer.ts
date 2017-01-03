@@ -145,7 +145,26 @@ export class AutServer {
   }
 
 
-  private processPost(req: http.ServerRequest, resp: http.ServerResponse, user: any, dataS: string) {
+
+  private processPost(req: http.ServerRequest, resp: http.ServerResponse, user: any) {
+   this.readPostData(req,(dataStr:string)=>{
+
+      let ar: string[] = req.url.split('/');
+
+      switch (ar[1]){
+
+      }
+
+      resp.write(JSON.stringify({
+        data:{ff:dataStr},
+        timestamp:Date.now()
+      }))
+      resp.end();
+
+
+
+    })
+
 
 
   }
@@ -263,7 +282,7 @@ export class AutServer {
 
   processRequest(req: http.ServerRequest, resp: http.ServerResponse, user: any): void {
     if (req.method == 'GET') this.processGet(req, resp, user);
-    else if (req.method == 'POST') this.readPostData(req, (data) => this.processPost(req,resp, user, data));
+    else if (req.method == 'POST') this.processPost(req,resp, user);
   }
 
 
@@ -271,9 +290,6 @@ export class AutServer {
   private isSecure: boolean;
 
 
-  retriveUser(req: http.ServerRequest): any {
-    return {user: 'adnin'};
-  }
 
 
   createServer(secure = true, port = 443) {
@@ -300,15 +316,8 @@ export class AutServer {
         return;
       }
 
-      let user = this.retriveUser(req);
-//////////////
-      resp.write(JSON.stringify({
-        error: 'login',
-        timestamp: Date.now()
-      }));
-      resp.end();
+      let user = this.getUserFromSession(req);
 
-    //////////////////
       if (user){
           this.processRequest(req, resp, user);
       } else {

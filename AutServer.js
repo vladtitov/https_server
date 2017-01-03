@@ -129,7 +129,17 @@ var AutServer = (function () {
             callBack(body);
         });
     };
-    AutServer.prototype.processPost = function (req, resp, user, dataS) {
+    AutServer.prototype.processPost = function (req, resp, user) {
+        this.readPostData(req, function (dataStr) {
+            var ar = req.url.split('/');
+            switch (ar[1]) {
+            }
+            resp.write(JSON.stringify({
+                data: { ff: dataStr },
+                timestamp: Date.now()
+            }));
+            resp.end();
+        });
     };
     AutServer.prototype.saveUserData = function (user, data) {
         //TODO saveuser session in DB
@@ -201,14 +211,10 @@ var AutServer = (function () {
         this.server.close();
     };
     AutServer.prototype.processRequest = function (req, resp, user) {
-        var _this = this;
         if (req.method == 'GET')
             this.processGet(req, resp, user);
         else if (req.method == 'POST')
-            this.readPostData(req, function (data) { return _this.processPost(req, resp, user, data); });
-    };
-    AutServer.prototype.retriveUser = function (req) {
-        return { user: 'adnin' };
+            this.processPost(req, resp, user);
     };
     AutServer.prototype.createServer = function (secure, port) {
         var _this = this;
@@ -229,14 +235,7 @@ var AutServer = (function () {
                 _this.loginFunction(req, resp);
                 return;
             }
-            var user = _this.retriveUser(req);
-            //////////////
-            resp.write(JSON.stringify({
-                error: 'login',
-                timestamp: Date.now()
-            }));
-            resp.end();
-            //////////////////
+            var user = _this.getUserFromSession(req);
             if (user) {
                 _this.processRequest(req, resp, user);
             }
