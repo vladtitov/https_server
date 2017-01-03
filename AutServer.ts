@@ -17,13 +17,11 @@ export class AutServer {
   private error: number;
 
   private SESS = 'SESSIONID';
-  private sessions = {};
+  private sessions:{[key:string]:UserSession} = {};
   private PUB_DIR = 'pub';
   private fs = fs;
   private sqlite3 = require('sqlite3').verbose();
   private db;
-
-  private fileManager: FM.FileManager = new FM.FileManager();
 
   private generate_key() {
     var sha = crypto.createHash('sha256');
@@ -31,25 +29,6 @@ export class AutServer {
     return sha.digest('hex');
   }
 
-  private getSessionUser(req: http.ServerRequest): string {
-    let cookie: string = req.headers.cookie;
-    if (!cookie) return null;
-    let l = this.SESS.length;
-    let id = cookie.substr(l + 1).trim();
-    console.log('session id; ' + id);
-    return this.sessions[id];
-  }
-
-
-
-  private sendJson = function (res: http.ServerResponse, data: any) {
-    res.setHeader("Content-Type", 'application/json');
-    res.end(JSON.stringify(data));
-  }
-
-  private sendError = function (res: http.ServerResponse, reason: string) {
-    res.end(reason);
-  }
 
   private sendFile(filename: string, res: http.ServerResponse) {
     console.log(filename)
@@ -96,18 +75,6 @@ export class AutServer {
       }
     });
 
-  }
-
-
-  private processGetQuery(url: string, q: number, res: http.ServerResponse): void {
-    var func: string[] = url.substr(1, q - 1).split('/');
-    var args: string[] = url.substr(q + 1).split(',');
-    switch (func.shift()) {
-      case 'fileM':
-        this.fileManager.processRequest(func, args, (data) => this.sendJson(res, data));
-        break;
-
-    }
   }
 
   private processGet(req: http.ServerRequest, resp: http.ServerResponse, user: any) {
@@ -169,27 +136,32 @@ export class AutServer {
 
   }
 
-  private saveUserData(user, data) {
-    //TODO saveuser session in DB
-    console.log('saveUserData user ', user);
-    console.log('saveUserData data ', data);
+  private startExpired():void{
+    setInterval(()=>{
+      let time:number = Date.now()/1000;
+      for(let str in this.sessions) if(this.sessions[str].expired < time) this.killUserSession(this.sessions[str])
+    },30000)
   }
 
-  private killUserSession(user: any, data: any) {
+  private killUserSession(user:UserSession):boolean {
     var sid = user.sid;
-    delete this.sessions[sid];
-    if (data) this.saveUserData(user, data);
+    let exists:boolean = false;
+    if(this.sessions[sid]){
+      exists = true
+      delete this.sessions[sid];
+    }
+    return exists;
   }
 
   ///////////////////////////////////////////////////user//////////////////////////////////////
 
-  private setUserInSession = function (user:any, resp:http.ServerResponse) {
+  private setUserInSession = function (user:UserSession, resp:http.ServerResponse) {
 
     var id: string = this.generate_key();
     user.sid = id;
     user.expired = Math.round(Date.now()/1000) + 3600;
     this.sessions[id] = user;
-    resp.setHeader("Set-Cookie", ['sessionid=' + id, 'Max-Age=3600', 'Version=1']);// 'sessionid id);
+   // resp.setHeader("Set-Cookie", ['sessionid=' + id, 'Max-Age=3600', 'Version=1']);// 'sessionid id);
 
 
     resp.setHeader('Access-Control-Expose-Headers','x-requested-with');
@@ -201,8 +173,9 @@ export class AutServer {
   private getUserFromSession(req:http.ServerRequest):UserSession{
 
     let sid:string = req.headers['x-requested-with'];
-    console.log('sid ' + sid);
+    //console.log('sid ' + sid);
     let user:UserSession = this.sessions[sid];
+
     return user;
   }
 
@@ -316,7 +289,7 @@ export class AutServer {
         return;
       }
 
-      let user = this.getUserFromSession(req);
+      let user:UserSession = this.getUserFromSession(req);
 
       if (user){
           this.processRequest(req, resp, user);
@@ -343,7 +316,7 @@ export class AutServer {
 
 
 export class UserSession{
-  sessionid:string;
+  sid:string;
   role:string;
   expired:number;
 }

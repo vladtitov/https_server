@@ -2,7 +2,6 @@
 var fs = require("fs");
 var crypto = require('crypto');
 var path = require("path");
-var FM = require('./FileManager');
 //import db from 'sqlite';
 var https = require('https');
 var AutServer = (function () {
@@ -16,21 +15,13 @@ var AutServer = (function () {
         this.PUB_DIR = 'pub';
         this.fs = fs;
         this.sqlite3 = require('sqlite3').verbose();
-        this.fileManager = new FM.FileManager();
-        this.sendJson = function (res, data) {
-            res.setHeader("Content-Type", 'application/json');
-            res.end(JSON.stringify(data));
-        };
-        this.sendError = function (res, reason) {
-            res.end(reason);
-        };
         ///////////////////////////////////////////////////user//////////////////////////////////////
         this.setUserInSession = function (user, resp) {
             var id = this.generate_key();
             user.sid = id;
             user.expired = Math.round(Date.now() / 1000) + 3600;
             this.sessions[id] = user;
-            resp.setHeader("Set-Cookie", ['sessionid=' + id, 'Max-Age=3600', 'Version=1']); // 'sessionid id);
+            // resp.setHeader("Set-Cookie", ['sessionid=' + id, 'Max-Age=3600', 'Version=1']);// 'sessionid id);
             resp.setHeader('Access-Control-Expose-Headers', 'x-requested-with');
             //resp.setHeader('X-Request-ID',id);
             resp.setHeader('x-requested-with', id);
@@ -40,15 +31,6 @@ var AutServer = (function () {
         var sha = crypto.createHash('sha256');
         sha.update(Math.random().toString());
         return sha.digest('hex');
-    };
-    AutServer.prototype.getSessionUser = function (req) {
-        var cookie = req.headers.cookie;
-        if (!cookie)
-            return null;
-        var l = this.SESS.length;
-        var id = cookie.substr(l + 1).trim();
-        console.log('session id; ' + id);
-        return this.sessions[id];
     };
     AutServer.prototype.sendFile = function (filename, res) {
         console.log(filename);
@@ -91,16 +73,6 @@ var AutServer = (function () {
             }
         });
     };
-    AutServer.prototype.processGetQuery = function (url, q, res) {
-        var _this = this;
-        var func = url.substr(1, q - 1).split('/');
-        var args = url.substr(q + 1).split(',');
-        switch (func.shift()) {
-            case 'fileM':
-                this.fileManager.processRequest(func, args, function (data) { return _this.sendJson(res, data); });
-                break;
-        }
-    };
     AutServer.prototype.processGet = function (req, resp, user) {
         var url = decodeURI(req.url);
         resp.write(JSON.stringify({
@@ -141,20 +113,27 @@ var AutServer = (function () {
             resp.end();
         });
     };
-    AutServer.prototype.saveUserData = function (user, data) {
-        //TODO saveuser session in DB
-        console.log('saveUserData user ', user);
-        console.log('saveUserData data ', data);
+    AutServer.prototype.startExpired = function () {
+        var _this = this;
+        setInterval(function () {
+            var time = Date.now() / 1000;
+            for (var str in _this.sessions)
+                if (_this.sessions[str].expired < time)
+                    _this.killUserSession(_this.sessions[str]);
+        }, 30000);
     };
-    AutServer.prototype.killUserSession = function (user, data) {
+    AutServer.prototype.killUserSession = function (user) {
         var sid = user.sid;
-        delete this.sessions[sid];
-        if (data)
-            this.saveUserData(user, data);
+        var exists = false;
+        if (this.sessions[sid]) {
+            exists = true;
+            delete this.sessions[sid];
+        }
+        return exists;
     };
     AutServer.prototype.getUserFromSession = function (req) {
         var sid = req.headers['x-requested-with'];
-        console.log('sid ' + sid);
+        //console.log('sid ' + sid);
         var user = this.sessions[sid];
         return user;
     };
