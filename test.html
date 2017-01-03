@@ -19,6 +19,7 @@
 
                 $.post(url+'/login',JSON.stringify({username:'adminuser',password:'adminpassword'})).done(function (res) {
                     console.log(res)
+                    sendData();
                 }).fail(function (err) {
                     console.warn(err);
                 })
@@ -26,7 +27,7 @@
 
 
 
-            var gsendData = function () {
+            var sendData = function () {
 
                 $.post(url+'/senddata',JSON.stringify({data:'some data',moreData:'moredata'})).done(function (res) {
                     console.log(res)

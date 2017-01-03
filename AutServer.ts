@@ -40,16 +40,6 @@ export class AutServer {
     return this.sessions[id];
   }
 
-  private setSessionUser(resp: http.ServerResponse) {
-    var id: string = this.generate_key();
-    var user: any = {};
-    user.sid = id;
-    user.expired = Date.now() + 100000;
-    this.sessions[id] = user;
-    console.log(user);
-    resp.setHeader("Set-Cookie", ['sessionid=' + id, 'Max-Age=3600', 'Version=1']);// 'sessionid id);
-    return user;
-  }
 
 
   private sendJson = function (res: http.ServerResponse, data: any) {
@@ -172,42 +162,66 @@ export class AutServer {
     if (data) this.saveUserData(user, data);
   }
 
-  private setUserInSession = function (sid, user) {
-    var u = this.sessions[sid];
-    //console.log(' setUserInSession  user  fo session: '+sid,u);
-    for (var str in user) u[str] = user[str];
-    this.sessions[sid] = u;
+  ///////////////////////////////////////////////////user//////////////////////////////////////
+
+  private setUserInSession = function (user:any, resp:http.ServerResponse) {
+
+    var id: string = this.generate_key();
+    user.sid = id;
+    user.expired = Math.round(Date.now()/1000) + 3600;
+    this.sessions[id] = user;
+    resp.setHeader("Set-Cookie", ['sessionid=' + id, 'Max-Age=3600', 'Version=1']);// 'sessionid id);
+
+
+    resp.setHeader('Access-Control-Expose-Headers','x-requested-with');
+    //resp.setHeader('X-Request-ID',id);
+    resp.setHeader('x-requested-with',id);
+
+  }
+
+  private getUserFromSession(req:http.ServerRequest):UserSession{
+
+    let sid:string = req.headers['x-requested-with'];
+    console.log('sid ' + sid);
+    let user:UserSession = this.sessions[sid];
+    return user;
   }
 
 
-  private loginFunction = function (user:any,  callBack: Function) {
-
-    if (!this.db) this.db = new this.sqlite3.Database('data/directories.db');
-
-   // var stmt = this.db.all('SELECT * FROM users ', function (err, rows) {
 
 
+  private loginFunction(req:http.ServerRequest, resp:http.ServerResponse) {
+
+    this.readData(req,(data)=> {
+      let user = JSON.parse(data);
       let ar = [
         crypto.createHash('md5').update(user.username).digest("hex"),
         crypto.createHash('md5').update(user.password).digest("hex")
       ];
 
-    console.log(ar);
+      if (!this.db) this.db = new this.sqlite3.Database('data/directories.db');
 
-    var stmt = this.db.all('SELECT * FROM users WHERE username=? AND password=?', ar , function (err, rows) {
-      console.log(rows);
-      if (err) {
-        console.log(err);
-        callBack(0);
-      } else if (rows.length === 0) {
-        callBack(0);
-      } else {
+      var stmt = this.db.all('SELECT * FROM users WHERE username=? AND password=?', ar ,(err, rows) => {
+        console.log(rows);
+        if (err){
+          resp.statusCode = 503;;
+          resp.end('Server error');
+          return;
+        }
 
+        if(rows.length ===1) {
+          this.setUserInSession(rows[0],resp);
+          resp.end(JSON.stringify({
+            result:'logedin',
+            stsus:'OK'
+          }));
+        }
+        else{
+          resp.statusCode = 509;
+          resp.end('Authentication error');
+        }
 
-        var user = rows[0];
-        callBack(user);
-      }
-
+      });
     });
   }
 
@@ -229,7 +243,7 @@ export class AutServer {
 
   }
 
-  addHeaders(resp: http.ServerResponse): void {
+  addAccessHeaders(resp: http.ServerResponse): void {
     resp.setHeader('Content-Type', 'application/json');
     resp.setHeader('Access-Control-Allow-Origin', '*');
   }
@@ -277,32 +291,27 @@ export class AutServer {
       let ip = req.connection.remoteAddress.substr(req.connection.remoteAddress.lastIndexOf(':') + 1);
 
       let ar: string[] = req.url.split('/');
+      this.addAccessHeaders(resp);
+
+      this.getUserFromSession(req);
       console.log(ar);
       if (ar[1] === 'login') {
+        this.loginFunction(req, resp);
+        return;
+      }
 
-        this.readData(req,(data)=>{
-          let u =JSON.parse(data);
-          this.loginFunction(u, (res)=>{
-            res;
-          })
-          console.log(u);
+      let user = this.retriveUser(req);
+//////////////
+      resp.write(JSON.stringify({
+        error: 'login',
+        timestamp: Date.now()
+      }));
+      resp.end();
 
-        });
-
-        this.addHeaders(resp);
-        resp.write(JSON.stringify({
-          error: 'login function',
-          timestamp: Date.now()
-        }));
-
-        resp.end();
-
+    //////////////////
+      if (user){
+          this.processRequest(req, resp, user);
       } else {
-
-        let user = this.retriveUser(req);
-        if (user) this.processRequest(req, resp, user);
-        else {
-
           resp.write(JSON.stringify({
             error: 'login',
             timestamp: Date.now()
@@ -310,7 +319,7 @@ export class AutServer {
           resp.end();
         }
 
-      }
+
     });
 
     srv.listen(port, function () {
@@ -321,4 +330,11 @@ export class AutServer {
   }
 
 
+}
+
+
+export class UserSession{
+  sessionid:string;
+  role:string;
+  expired:number;
 }

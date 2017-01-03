@@ -24,36 +24,16 @@ var AutServer = (function () {
         this.sendError = function (res, reason) {
             res.end(reason);
         };
-        this.setUserInSession = function (sid, user) {
-            var u = this.sessions[sid];
-            //console.log(' setUserInSession  user  fo session: '+sid,u);
-            for (var str in user)
-                u[str] = user[str];
-            this.sessions[sid] = u;
-        };
-        this.loginFunction = function (user, callBack) {
-            if (!this.db)
-                this.db = new this.sqlite3.Database('data/directories.db');
-            // var stmt = this.db.all('SELECT * FROM users ', function (err, rows) {
-            var ar = [
-                crypto.createHash('md5').update(user.username).digest("hex"),
-                crypto.createHash('md5').update(user.password).digest("hex")
-            ];
-            console.log(ar);
-            var stmt = this.db.all('SELECT * FROM users WHERE username=? AND password=?', ar, function (err, rows) {
-                console.log(rows);
-                if (err) {
-                    console.log(err);
-                    callBack(0);
-                }
-                else if (rows.length === 0) {
-                    callBack(0);
-                }
-                else {
-                    var user = rows[0];
-                    callBack(user);
-                }
-            });
+        ///////////////////////////////////////////////////user//////////////////////////////////////
+        this.setUserInSession = function (user, resp) {
+            var id = this.generate_key();
+            user.sid = id;
+            user.expired = Math.round(Date.now() / 1000) + 3600;
+            this.sessions[id] = user;
+            resp.setHeader("Set-Cookie", ['sessionid=' + id, 'Max-Age=3600', 'Version=1']); // 'sessionid id);
+            resp.setHeader('Access-Control-Expose-Headers', 'x-requested-with');
+            //resp.setHeader('X-Request-ID',id);
+            resp.setHeader('x-requested-with', id);
         };
     }
     AutServer.prototype.generate_key = function () {
@@ -69,16 +49,6 @@ var AutServer = (function () {
         var id = cookie.substr(l + 1).trim();
         console.log('session id; ' + id);
         return this.sessions[id];
-    };
-    AutServer.prototype.setSessionUser = function (resp) {
-        var id = this.generate_key();
-        var user = {};
-        user.sid = id;
-        user.expired = Date.now() + 100000;
-        this.sessions[id] = user;
-        console.log(user);
-        resp.setHeader("Set-Cookie", ['sessionid=' + id, 'Max-Age=3600', 'Version=1']); // 'sessionid id);
-        return user;
     };
     AutServer.prototype.sendFile = function (filename, res) {
         console.log(filename);
@@ -172,6 +142,44 @@ var AutServer = (function () {
         if (data)
             this.saveUserData(user, data);
     };
+    AutServer.prototype.getUserFromSession = function (req) {
+        var sid = req.headers['x-requested-with'];
+        console.log('sid ' + sid);
+        var user = this.sessions[sid];
+        return user;
+    };
+    AutServer.prototype.loginFunction = function (req, resp) {
+        var _this = this;
+        this.readData(req, function (data) {
+            var user = JSON.parse(data);
+            var ar = [
+                crypto.createHash('md5').update(user.username).digest("hex"),
+                crypto.createHash('md5').update(user.password).digest("hex")
+            ];
+            if (!_this.db)
+                _this.db = new _this.sqlite3.Database('data/directories.db');
+            var stmt = _this.db.all('SELECT * FROM users WHERE username=? AND password=?', ar, function (err, rows) {
+                console.log(rows);
+                if (err) {
+                    resp.statusCode = 503;
+                    ;
+                    resp.end('Server error');
+                    return;
+                }
+                if (rows.length === 1) {
+                    _this.setUserInSession(rows[0], resp);
+                    resp.end(JSON.stringify({
+                        result: 'logedin',
+                        stsus: 'OK'
+                    }));
+                }
+                else {
+                    resp.statusCode = 509;
+                    resp.end('Authentication error');
+                }
+            });
+        });
+    };
     AutServer.prototype.readData = function (req, callback) {
         var data = '';
         req.on('data', function (d) {
@@ -181,7 +189,7 @@ var AutServer = (function () {
             callback(data);
         });
     };
-    AutServer.prototype.addHeaders = function (resp) {
+    AutServer.prototype.addAccessHeaders = function (resp) {
         resp.setHeader('Content-Type', 'application/json');
         resp.setHeader('Access-Control-Allow-Origin', '*');
     };
@@ -214,33 +222,30 @@ var AutServer = (function () {
         var srv = https.createServer(options, function (req, resp) {
             var ip = req.connection.remoteAddress.substr(req.connection.remoteAddress.lastIndexOf(':') + 1);
             var ar = req.url.split('/');
+            _this.addAccessHeaders(resp);
+            _this.getUserFromSession(req);
             console.log(ar);
             if (ar[1] === 'login') {
-                _this.readData(req, function (data) {
-                    var u = JSON.parse(data);
-                    _this.loginFunction(u, function (res) {
-                        res;
-                    });
-                    console.log(u);
-                });
-                _this.addHeaders(resp);
+                _this.loginFunction(req, resp);
+                return;
+            }
+            var user = _this.retriveUser(req);
+            //////////////
+            resp.write(JSON.stringify({
+                error: 'login',
+                timestamp: Date.now()
+            }));
+            resp.end();
+            //////////////////
+            if (user) {
+                _this.processRequest(req, resp, user);
+            }
+            else {
                 resp.write(JSON.stringify({
-                    error: 'login function',
+                    error: 'login',
                     timestamp: Date.now()
                 }));
                 resp.end();
-            }
-            else {
-                var user = _this.retriveUser(req);
-                if (user)
-                    _this.processRequest(req, resp, user);
-                else {
-                    resp.write(JSON.stringify({
-                        error: 'login',
-                        timestamp: Date.now()
-                    }));
-                    resp.end();
-                }
             }
         });
         srv.listen(port, function () {
@@ -251,3 +256,9 @@ var AutServer = (function () {
     return AutServer;
 }());
 exports.AutServer = AutServer;
+var UserSession = (function () {
+    function UserSession() {
+    }
+    return UserSession;
+}());
+exports.UserSession = UserSession;
