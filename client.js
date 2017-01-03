@@ -1,11 +1,5 @@
-/**
- * Created by Vlad on 1/2/2017.
- */
-/// <reference path="scripts/typings/node/node.d.ts" />
-var request = require('request');
+"use strict";
 var https = require('https');
-var fs = require('fs');
-var user = JSON.stringify({ username: 'adminuser', password: 'adminpassword' });
 var options = {
     hostname: '192.168.1.11',
     method: 'POST',
@@ -14,22 +8,47 @@ var options = {
     rejectUnauthorized: false,
     requestCert: true,
     agent: false,
-    headers: { 'x-requested-with': 'hello headers' }
+    headers: { 'x-requested-with': 'hello headers', 'Content-Type': 'application/json' }
 };
-var req = https.request(options, function (res) {
-    //console.log(arguments) ;
+function getData() {
+    options.path = '/getdata';
+    var req = https.request(options, function (resp) {
+        parseBody(resp, function (result) {
+            console.log(result);
+        });
+    });
+    var user = JSON.stringify({ username: 'adminuser', password: 'adminpassword' });
+    req.write(user);
+    req.end();
+    req.on('error', function (err) {
+        console.log(err);
+    });
+}
+function parseBody(resp, callBack) {
     var body = '';
-    console.log(res.headers['x-requested-with']);
-    res.on('data', function (data) {
-        //console.log(data);
+    resp.on('data', function (data) {
         body += data;
     });
-    res.on('end', function () {
-        console.log('body ' + body);
+    resp.on('end', function () {
+        callBack(JSON.parse(body));
     });
-});
-req.write(user);
-req.end();
-req.on('error', function (err) {
-    console.log(err);
-});
+}
+function doLogin() {
+    options.path = '/login';
+    var req = https.request(options, function (resp) {
+        parseBody(resp, function (result) {
+            console.log(result);
+            if (result.status === 'OK') {
+                options.headers['x-requested-with'] = resp.headers['x-requested-with'];
+                getData();
+            }
+        });
+    });
+    var user = JSON.stringify({ username: 'adminuser', password: 'adminpassword' });
+    req.write(user);
+    req.end();
+    req.on('error', function (err) {
+        console.log(err);
+    });
+}
+doLogin();

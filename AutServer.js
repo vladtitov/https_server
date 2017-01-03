@@ -170,7 +170,7 @@ var AutServer = (function () {
                     _this.setUserInSession(rows[0], resp);
                     resp.end(JSON.stringify({
                         result: 'logedin',
-                        stsus: 'OK'
+                        status: 'OK'
                     }));
                 }
                 else {
